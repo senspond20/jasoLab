@@ -4,8 +4,7 @@ import "./App.css"
 export default function App() {
   return (
     <>
-    <JasoComposer/>
-<h1>안녕</h1>
+      <JasoComposer/>
     </>
   )
 }
