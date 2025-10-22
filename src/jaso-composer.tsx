@@ -3,111 +3,193 @@
 import { useState } from "react"
 import { Button } from "./components/ui/button"
 import { Checkbox } from "./components/ui/checkbox"
-import { FolderOpen, Play, FileText, FileArchive, Image, FileType  } from "lucide-react"
+import { FolderOpen, Play, FileText, FileArchive, Image, FileType, Folder } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
-import { sep } from "@tauri-apps/api/path"
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog"
 
 interface FileItem {
   name: string
   path: string
   ext: string
+  isDir: boolean
   jaso: boolean
   selected: boolean
 }
 
 export default function JasoComposer() {
   const [folderPath, setFolderPath] = useState<string>("")
-  const [files, setFiles] = useState<FileItem[]>([])
-
-  // Tauri에서 폴더 선택 다이얼로그 열기
-  // const handleOpenFolder = async () => {
-  //   // TODO: Tauri의 dialog API 연동
-  //   // const selected = await open({ directory: true, multiple: false })
-
-  //   // 임시 데모 데이터
-  //   setFolderPath("C:\\Users\\Documents\\jaso-files")
-  //   setFiles([
-  //     { name: "ㄱㅏㄴㅏㄷㅏ.txt", path: "C:\\Users\\Documents\\jaso-files\\ㄱㅏㄴㅏㄷㅏ.txt", selected: false },
-  //     { name: "ㅎㅏㄴㄱㅜㄱ.txt", path: "C:\\Users\\Documents\\jaso-files\\ㅎㅏㄴㄱㅜㄱ.txt", selected: false },
-  //     { name: "ㅇㅣㄹㅂㅗㄴ.txt", path: "C:\\Users\\Documents\\jaso-files\\ㅇㅣㄹㅂㅗㄴ.txt", selected: false },
-  //     { name: "ㅁㅣㄱㅜㄱ.txt", path: "C:\\Users\\Documents\\jaso-files\\ㅁㅣㄱㅜㄱ.txt", selected: false },
-  //   ])
-  // }
+  const [files, setFiles] = useState<FileItem[]>([])   // 자소 분리 파일
+  const [files2, setFiles2] = useState<FileItem[]>([]) // 정상 파일
 
 
-   const handleOpenFolder = async () => {
+  const handleOpenFolder = async () => {
     try {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "자소파일 폴더 선택",
-      });
-      if (!selected) return;
+        title: "폴더 선택 (폴더만 보여요)",
+      })
+      if (!selected) return
 
-      setFolderPath(selected as string);
-
-      // Rust 명령 호출 → 파일 목록 가져오기
+      setFolderPath(selected as string)
       const files = await invoke<FileItem[]>("list_jaso_files", {
         dirPath: selected,
-      });
+      })
+    const jasoFiles = files.filter((f) => f.jaso)
+    const normalFiles = files.filter((f) => !f.jaso)
 
-      console.log(files)
-      setFiles(files);
+    setFiles(jasoFiles)
+    setFiles2(normalFiles)
+
+    console.log("📂 자소 파일:", jasoFiles)
+    console.log("📄 정상 파일:", normalFiles)
     } catch (err) {
-      console.error("폴더 열기 실패:", err);
+      console.error("폴더 열기 실패:", err)
     }
-  };
-
-  const handleToggleFile = (index: number) => {
-    setFiles((prev) => prev.map((file, i) => (i === index ? { ...file, selected: !file.selected } : file)))
   }
 
-  const handleToggleAll = () => {
-    const allSelected = files.every((f) => f.selected)
-    setFiles((prev) => prev.map((file) => ({ ...file, selected: !allSelected })))
+  const handleToggleFile = (index: number) => {
+    setFiles((prev) =>
+      prev.map((file, i) => (i === index ? { ...file, selected: !file.selected } : file))
+    )
+  }
+
+ 
+  const handleToggleFile2 = (index: number) => {
+    setFiles2((prev) =>
+      prev.map((file, i) => (i === index ? { ...file, selected: !file.selected } : file))
+    )
   }
 
   const handleCompose = async () => {
     const selectedFiles = files.filter((f) => f.selected)
     if (selectedFiles.length === 0) {
-      alert("파일을 선택해주세요")
+      alert("자소 분리 파일을 선택해주세요.")
       return
     }
 
-    // TODO: Tauri의 Rust 백엔드로 자소합성 요청
-    console.log("[v0] Composing files:", selectedFiles)
-    alert(`${selectedFiles.length}개 파일 자소합성 실행`)
-  }
+    try {
+      const filePaths = selectedFiles.map((f) => f.path)
+      const result = (await invoke("compose_jaso_files", { filePaths })) as {
+        results: { old: string; new?: string; status: string }[]
+      }
 
-  const getFileIcon = (ext: string) => {
+      const updatedFiles = files.map((file) => {
+        const renameInfo = result?.results?.find(
+          (r: any) => r.old === file.path && r.status === "ok"
+        )
+        if (renameInfo) {
+          const newPath = renameInfo.new
+          const newName = newPath.split(/[\\/]/).pop() || file.name
+          return { ...file, path: newPath, name: newName, jaso: false, selected: false }
+        }
+        return file
+      })
+      const composedFiles = updatedFiles.filter((f) => f.jaso === false)
+      const remainingFiles = updatedFiles.filter((f) => f.jaso === true)
+
+      // ✅ 상태 반영: 왼쪽 목록은 남은 자소 파일, 오른쪽은 기존 + 새로 합성된 파일
+      setFiles(remainingFiles)
+      setFiles2((prev) => [...prev, ...composedFiles])
+      alert("✅ 자소 합성이 완료되었습니다!")
+    } catch (err) {
+      console.error("자소합성 실패:", err)
+      alert("자소합성 중 오류가 발생했습니다.")
+    }
+  }
+function renderVisuallySeparated(name: string) {
+  // 자모 분해
+  const decomposed = name.normalize("NFD")
+
+  // 각 자소를 span으로 감싸고 letter-spacing 적용
+  return decomposed.split("").map((ch, i) => (
+    <span key={i} className="inline-block font-mono select-none">
+      {ch}
+    </span>
+  ))
+}
+  const handleSeparate = async () => {
+    const selectedFiles = files2.filter((f) => f.selected)
+    if (selectedFiles.length === 0) {
+      alert("정상 파일을 선택해주세요.")
+      return
+    }
+
+    try {
+      const filePaths = selectedFiles.map((f) => f.path)
+      const result = await invoke<{ results: { old: string; new: string; status: string }[] }>(
+        "force_jaso_split",
+        { filePaths }
+      )
+
+      console.log("자소 분리 결과:", result)
+
+      const splitSuccess = result?.results?.filter((r) => r.status === "ok") || []
+
+      // ✅ NFD(자소 분리)된 이름을 UI에서도 반영
+      const newJasoFiles: FileItem[] = splitSuccess.map((r) => {
+     const newName = r.new.split(/[\\/]/).pop() || "unknown"
+     const oldFile = files2.find((f) => f.path === r.old)  // 기존 정보 찾아오기
+     const forcedSeparated = newName.normalize("NFD").split("").join("\u200C")
+        // 실제 파일 이름은 이미 NFD로 되어 있으므로 그대로 반영
+        return {
+          name: forcedSeparated,
+          path: r.new,
+          ext: (r.new.split(".").pop() || "").toLowerCase(),
+          isDir: oldFile ? oldFile.isDir : false, // ✅ 폴더 여부 그대로 유지
+          jaso: true,
+          selected: false,
+        }
+      })
+
+      // ✅ 기존 정상 파일 중 처리된 파일 제거
+      const remainingNormalFiles = files2.filter(
+        (f) => !splitSuccess.some((r) => r.old === f.path)
+      )
+
+      // ✅ UI 업데이트
+      setFiles((prev) => [...prev, ...newJasoFiles]) // 새 자소 파일로 이동
+      setFiles2(remainingNormalFiles) // 처리된 건 제거
+
+      alert(`✅ ${splitSuccess.length}개의 파일 자소분리 완료!`)
+    } catch (err) {
+      console.error("자소분리 실패:", err)
+      alert("자소분리 중 오류가 발생했습니다.")
+    }
+  }
+  const getFileIcon = (ext: string, isDir?: boolean) => {
     const iconProps = { size: 18, className: "text-white" }
+    const wrapper = (color: string, icon: JSX.Element) => (
+      <div className={`rounded-md p-1 flex items-center justify-center ${color}`}>{icon}</div>
+    )
+
+    if (isDir) return wrapper("bg-amber-500", <Folder {...iconProps} />)
     switch (ext) {
       case "pdf":
-        return <div className="rounded-md bg-red-500"><FileText {...iconProps} /></div>
+        return wrapper("bg-red-500", <FileText {...iconProps} />)
       case "zip":
       case "rar":
-        return <div className="rounded-md bg-yellow-500"><FileArchive {...iconProps} /></div>
+        return wrapper("bg-yellow-500", <FileArchive {...iconProps} />)
       case "jpg":
       case "jpeg":
       case "png":
       case "gif":
-        return <div className="rounded-md bg-blue-500"><Image {...iconProps} /></div>
+        return wrapper("bg-blue-500", <Image {...iconProps} />)
       case "hwp":
       case "doc":
       case "docx":
-        return <div className="rounded-md bg-green-500"><FileType {...iconProps} /></div>
+        return wrapper("bg-green-500", <FileType {...iconProps} />)
       default:
-        return <div className="rounded-md bg-gray-400"><FileText {...iconProps} /></div>
+        return wrapper("bg-gray-400", <FileText {...iconProps} />)
     }
   }
 
-
-  const selectedCount = files.filter((f) => f.selected).length
+  const selectedCount1 = files.filter((f) => f.selected).length
+  const selectedCount2 = files2.filter((f) => f.selected).length
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      {/* 상단: 폴더 경로 및 열기 버튼 */}
+      {/* 상단 바 */}
       <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
         <Button onClick={handleOpenFolder} variant="outline" size="sm">
           <FolderOpen className="mr-2 h-4 w-4" />
@@ -116,38 +198,54 @@ export default function JasoComposer() {
         <div className="flex-1 text-sm text-muted-foreground">{folderPath || "폴더를 선택하세요"}</div>
       </div>
 
-      {/* 중앙: 파일 목록 */}
-   <div className="flex-1 overflow-auto">
-      {files.length > 0 ? (
-        <div className="p-6 space-y-4">
-          {/* 자소 분리 파일 섹션 */}
-          <div>
-            <div className="mb-3 flex items-center justify-between border-b border-border pb-2">
+      {/* 중앙 영역: 좌우 분할 */}
+      <div className="flex-1 grid grid-cols-2 divide-x divide-border overflow-hidden">
+        {/* 좌측: 자소 분리 파일 */}
+        <div className="flex flex-col overflow-auto">
+          <div className="p-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={
+                  files.filter((f) => f.jaso && f.selected).length ===
+                    files.filter((f) => f.jaso).length && files.filter((f) => f.jaso).length > 0
+                }
+                onCheckedChange={() => {
+                  const allSelected = files.filter((f) => f.jaso).every((f) => f.selected)
+                  setFiles((prev) =>
+                    prev.map((file) =>
+                      file.jaso ? { ...file, selected: !allSelected } : file
+                    )
+                  )
+                }}
+              />
               <h2 className="text-sm font-semibold text-rose-500">자소 분리 파일</h2>
-              <span className="text-xs text-muted-foreground">
-                {files.filter((f) => f.jaso).length}개
-              </span>
             </div>
+            <span className="text-xs text-muted-foreground">
+              {(() => {
+                const jasoFiles = files.filter((f) => f.jaso)
+                const selected = jasoFiles.filter((f) => f.selected).length
+                return `${selected} / ${jasoFiles.length}개`
+              })()}
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-auto p-4 space-y-2">
             {files.filter((f) => f.jaso).length > 0 ? (
-              <div className="space-y-1">
-                {files
-                  .filter((f) => f.jaso)
-                  .map((file, index) => (
-                    <div
-                      key={file.path}
-                      className="flex items-center gap-3 rounded-lg px-4 "
-                    >
-                      <Checkbox
-                        checked={file.selected}
-                        onCheckedChange={() => handleToggleFile(index)}
-                      />
-                      {getFileIcon(file.ext)}
-                      <div className="flex-1">
-                        <div className="text-sm font-medium">{file.name}</div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
+              files
+                .filter((f) => f.jaso)
+                .map((file, index) => (
+                  <div
+                    key={file.path}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent transition"
+                  >
+                    <Checkbox
+                      checked={file.selected}
+                      onCheckedChange={() => handleToggleFile(index)}
+                    />
+                    {getFileIcon(file.ext, file.isDir)}
+                    <div className="flex-1 text-sm font-medium">{file.name}</div>
+                  </div>
+                ))
             ) : (
               <div className="text-xs text-muted-foreground text-center py-4">
                 자소 분리된 파일이 없습니다.
@@ -155,54 +253,77 @@ export default function JasoComposer() {
             )}
           </div>
 
-          {/* ✅ 정상 파일 섹션 */}
-          <div>
-            <div className="mb-3 flex items-center justify-between border-b border-border pb-2">
+          <div className="border-t border-border bg-card px-6 py-4">
+          <Button
+            onClick={handleCompose}
+            disabled={selectedCount1 === 0}
+            className="w-full bg-rose-600 hover:bg-rose-700 text-white transition"
+            size="lg"
+          >
+            자소 합성 실행 {selectedCount1 > 0 && `(${selectedCount1}개)`}
+            <Play className="mr-2 h-5 w-5" /> {/* → 방향 */}
+          </Button>
+          
+          </div>
+        </div>
+
+        {/* 우측: 정상 파일 */}
+        <div className="flex flex-col overflow-auto">
+          <div className="p-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={
+                  files2.length > 0 &&
+                  files2.every((f) => f.selected)
+                }
+                onCheckedChange={() => {
+                  const allSelected = files2.every((f) => f.selected)
+                  setFiles2((prev) =>
+                    prev.map((file) => ({ ...file, selected: !allSelected }))
+                  )
+                }}
+              />
               <h2 className="text-sm font-semibold text-blue-500">정상 파일</h2>
-              <span className="text-xs text-muted-foreground">
-                {files.filter((f) => !f.jaso).length}개
-              </span>
             </div>
-            {files.filter((f) => !f.jaso).length > 0 ? (
-              <div className="space-y-1">
-                {files
-                  .filter((f) => !f.jaso)
-                  .map((file, index) => (
-                    <div
-                      key={file.path}
-                      className="flex items-center gap-3 rounded-lg bg-card px-4 hover:bg-accent transition"
-                    >
-                      {/* 정상 파일은 선택 불가 */}
-                      <div className="pointer-events-none opacity-40">
-                        <Checkbox checked={file.selected} />
-                      </div>
-                      {getFileIcon(file.ext)}
-                      <div className="flex-1">
-                        <div className="text-sm">{file.name}</div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
+            <span className="text-xs text-muted-foreground">
+              {files2.filter((f) => f.selected).length} / {files2.length}개
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-auto p-4 space-y-2">
+            {files2.length > 0 ? (
+              files2.map((file, index) => (
+                <div
+                  key={file.path}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent transition"
+                >
+                  {/* ✅ 클릭 가능하도록 수정 */}
+                  <Checkbox
+                    checked={file.selected}
+                    onCheckedChange={() => handleToggleFile2(index)}
+                  />
+                  {getFileIcon(file.ext, file.isDir)}
+                  <div className="flex-1 text-sm">{file.name}</div>
+                </div>
+              ))
             ) : (
-              <div className="text-xs text-muted-foreground text-center">
+              <div className="text-xs text-muted-foreground text-center py-4">
                 정상 파일이 없습니다.
               </div>
             )}
           </div>
+            <div className="border-t border-border bg-card px-6 py-4">
+          <Button
+            onClick={handleSeparate}
+            disabled={selectedCount2 === 0}
+            className="w-full  bg-blue-600 hover:bg-blue-700 text-white transition"
+            size="lg"
+          >
+            <Play className="mr-2 h-5 w-5 rotate-180" /> {/* ← 방향 */}
+            자소 분리 실행 {selectedCount2 > 0 && `(${selectedCount2}개)`}
+          </Button>
+          </div>
         </div>
-      ) : (
-        <div className="flex h-full items-center justify-center text-muted-foreground">
-          폴더를 열어 파일 목록을 확인하세요
-        </div>
-      )}
-    </div>
-
-      {/* 하단: 실행 버튼 */}
-      <div className="border-t border-border bg-card px-6 py-4">
-        <Button onClick={handleCompose} disabled={selectedCount === 0} className="w-full" size="lg" variant="secondary">
-          <Play className="mr-2 h-5 w-5" />
-          자소합성 실행 {selectedCount > 0 && `(${selectedCount}개)`}
-        </Button>
       </div>
     </div>
   )
