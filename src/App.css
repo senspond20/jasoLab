@@ -64,4 +64,31 @@
   --sidebar-ring: oklch(0.6 0.18 250);
 }
 
+body{
+  overflow: hidden;
+}
+/* ===== Scrollbar 스타일 ===== */
+::-webkit-scrollbar {
+  width: 20px;
+  height: 1px;
+}
 
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #5d6de1, #f472b6);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #a855f7, #ec4899);
+}
+
+/* Firefox 대응 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c084fc transparent;
+}

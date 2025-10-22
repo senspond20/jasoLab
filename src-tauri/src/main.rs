@@ -1,3 +1,5 @@
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::fs;
 use tauri_plugin_dialog;
 use unicode_normalization::{UnicodeNormalization};
@@ -162,6 +164,7 @@ fn compose_jaso_files(file_paths: Vec<String>) -> serde_json::Value {
 
     json!({ "results": results })
 }
+
 
 fn main() {
     tauri::Builder::default()

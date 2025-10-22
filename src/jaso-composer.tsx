@@ -88,10 +88,10 @@ export default function JasoComposer() {
       const composedFiles = updatedFiles.filter((f) => f.jaso === false)
       const remainingFiles = updatedFiles.filter((f) => f.jaso === true)
 
-      // ✅ 상태 반영: 왼쪽 목록은 남은 자소 파일, 오른쪽은 기존 + 새로 합성된 파일
+      // 상태 반영: 왼쪽 목록은 남은 자소 파일, 오른쪽은 기존 + 새로 합성된 파일
       setFiles(remainingFiles)
       setFiles2((prev) => [...prev, ...composedFiles])
-      alert("✅ 자소 합성이 완료되었습니다!")
+      // alert(`${composedFiles.length}개의 자소 합성이 완료되었습니다!`)
     } catch (err) {
       console.error("자소합성 실패:", err)
       alert("자소합성 중 오류가 발생했습니다.")
@@ -126,8 +126,8 @@ function renderVisuallySeparated(name: string) {
 
       const splitSuccess = result?.results?.filter((r) => r.status === "ok") || []
 
-      // ✅ NFD(자소 분리)된 이름을 UI에서도 반영
-      const newJasoFiles: FileItem[] = splitSuccess.map((r) => {
+      // NFD(자소 분리)된 이름을 UI에서도 반영
+     const newJasoFiles: FileItem[] = splitSuccess.map((r) => {
      const newName = r.new.split(/[\\/]/).pop() || "unknown"
      const oldFile = files2.find((f) => f.path === r.old)  // 기존 정보 찾아오기
      const forcedSeparated = newName.normalize("NFD").split("").join("\u200C")
@@ -142,16 +142,16 @@ function renderVisuallySeparated(name: string) {
         }
       })
 
-      // ✅ 기존 정상 파일 중 처리된 파일 제거
+      // 기존 정상 파일 중 처리된 파일 제거
       const remainingNormalFiles = files2.filter(
         (f) => !splitSuccess.some((r) => r.old === f.path)
       )
 
-      // ✅ UI 업데이트
+      // UI 업데이트
       setFiles((prev) => [...prev, ...newJasoFiles]) // 새 자소 파일로 이동
       setFiles2(remainingNormalFiles) // 처리된 건 제거
 
-      alert(`✅ ${splitSuccess.length}개의 파일 자소분리 완료!`)
+      // alert(`${splitSuccess.length}개의 파일 자소분리 완료!`)
     } catch (err) {
       console.error("자소분리 실패:", err)
       alert("자소분리 중 오류가 발생했습니다.")
@@ -190,19 +190,27 @@ function renderVisuallySeparated(name: string) {
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* 상단 바 */}
-      <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
-        <Button onClick={handleOpenFolder} variant="outline" size="sm">
-          <FolderOpen className="mr-2 h-4 w-4" />
+      <div className="flex items-center gap-3 bg-card/80 backdrop-blur-md px-6 py-3 rounded-t-[11px]">
+        <Button
+          onClick={handleOpenFolder}
+          variant="outline"
+          size="sm"
+          className="border-none bg-white/80 hover:bg-white/90 text-gray-800 font-medium shadow-sm"
+        >
+          <FolderOpen className="mr-2 h-4 w-4 text-purple-500" />
           폴더 열기
         </Button>
-        <div className="flex-1 text-sm text-muted-foreground">{folderPath || "폴더를 선택하세요"}</div>
+
+        <div className="flex-1 text-sm font-medium text-gray-700 truncate">
+          {folderPath || "폴더를 선택하세요"}
+        </div>
       </div>
 
       {/* 중앙 영역: 좌우 분할 */}
       <div className="flex-1 grid grid-cols-2 divide-x divide-border overflow-hidden">
         {/* 좌측: 자소 분리 파일 */}
-        <div className="flex flex-col overflow-auto">
-          <div className="p-4 border-b border-border flex items-center justify-between">
+        <div className="flex flex-col overflow-auto pb-10">
+          <div className="pl-4 py-2 pb-2 pr-4 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Checkbox
                 checked={
@@ -229,14 +237,14 @@ function renderVisuallySeparated(name: string) {
             </span>
           </div>
 
-          <div className="flex-1 overflow-auto p-4 space-y-2">
+          <div className="flex-1 overflow-auto p-3 space-y-2">
             {files.filter((f) => f.jaso).length > 0 ? (
               files
                 .filter((f) => f.jaso)
                 .map((file, index) => (
                   <div
                     key={file.path}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent transition"
+                    className="flex items-center gap-3 rounded-lg hover:bg-accent transition"
                   >
                     <Checkbox
                       checked={file.selected}
@@ -253,23 +261,43 @@ function renderVisuallySeparated(name: string) {
             )}
           </div>
 
-          <div className="border-t border-border bg-card px-6 py-4">
+          <div className="sticky bottom-0 px-6 py-4">
           <Button
             onClick={handleCompose}
             disabled={selectedCount1 === 0}
-            className="w-full bg-rose-600 hover:bg-rose-700 text-white transition"
+            className={`
+              w-full relative isolate overflow-hidden 
+              bg-gradient-to-r from-rose-500 via-pink-500 to-purple-500
+              hover:from-rose-400 hover:via-pink-400 hover:to-purple-400
+              text-white font-semibold tracking-wide 
+              transition-all duration-200 
+              rounded-xl shadow-md
+              hover:shadow-lg
+              disabled:opacity-50 disabled:cursor-not-allowed
+              active:scale-[0.98]
+            `}
             size="lg"
           >
-            자소 합성 실행 {selectedCount1 > 0 && `(${selectedCount1}개)`}
-            <Play className="mr-2 h-5 w-5" /> {/* → 방향 */}
+            <div className="flex items-center justify-center">
+              자소 합성 실행
+              {selectedCount1 > 0 && (
+                <span className="ml-2 text-sm opacity-90 mr-2">
+                  ({selectedCount1}개)
+                </span>
+              )}
+              <Play className="h-5 w-5" />
+            </div>
+
+            {/* ✨ subtle glow 효과 */}
+            <span className="absolute inset-0 -z-10 bg-gradient-to-r from-white/10 to-transparent opacity-0 hover:opacity-20 transition-opacity"></span>
           </Button>
           
           </div>
         </div>
 
         {/* 우측: 정상 파일 */}
-        <div className="flex flex-col overflow-auto">
-          <div className="p-4 border-b border-border flex items-center justify-between">
+        <div className="flex flex-col overflow-auto pb-10">
+          <div className="pl-4 py-2 pb-2 pr-4 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Checkbox
                 checked={
@@ -290,12 +318,12 @@ function renderVisuallySeparated(name: string) {
             </span>
           </div>
 
-          <div className="flex-1 overflow-auto p-4 space-y-2">
+          <div className="flex-1 overflow-auto p-3 space-y-2">
             {files2.length > 0 ? (
               files2.map((file, index) => (
                 <div
                   key={file.path}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent transition"
+                  className="flex items-center gap-3 rounded-lg hover:bg-accent transition"
                 >
                   {/* ✅ 클릭 가능하도록 수정 */}
                   <Checkbox
@@ -312,16 +340,34 @@ function renderVisuallySeparated(name: string) {
               </div>
             )}
           </div>
-            <div className="border-t border-border bg-card px-6 py-4">
-          <Button
-            onClick={handleSeparate}
-            disabled={selectedCount2 === 0}
-            className="w-full  bg-blue-600 hover:bg-blue-700 text-white transition"
-            size="lg"
-          >
-            <Play className="mr-2 h-5 w-5 rotate-180" /> {/* ← 방향 */}
-            자소 분리 실행 {selectedCount2 > 0 && `(${selectedCount2}개)`}
-          </Button>
+            <div className="sticky bottom-0 px-6 py-4">
+<Button
+  onClick={handleSeparate}
+  disabled={selectedCount2 === 0}
+  className={`
+    w-full relative isolate overflow-hidden 
+    bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500
+    hover:from-indigo-400 hover:via-blue-400 hover:to-cyan-400
+    text-white font-semibold tracking-wide 
+    transition-all duration-200 
+    rounded-xl shadow-md
+    hover:shadow-lg
+    disabled:opacity-50 disabled:cursor-not-allowed
+    active:scale-[0.98]
+  `}
+  size="lg"
+>
+  <div className="flex items-center justify-center">
+    <Play className="mr-2 h-5 w-5 rotate-180" />
+    자소 분리 실행
+    {selectedCount2 > 0 && (
+      <span className="ml-2 text-sm opacity-90">
+        ({selectedCount2}개)
+      </span>
+    )}
+  </div>
+  <span className="absolute inset-0 -z-10 bg-gradient-to-r from-white/10 to-transparent opacity-0 hover:opacity-20 transition-opacity"></span>
+</Button>
           </div>
         </div>
       </div>
